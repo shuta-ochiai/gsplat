@@ -343,7 +343,16 @@ def relocate(
         return torch.nn.Parameter(p, requires_grad=p.requires_grad)
 
     def optimizer_fn(key: str, v: Tensor) -> Tensor:
+        # Both the donor (sampled_idxs) and the resurrected (dead_indices) GSs
+        # just had their parameter values overwritten above, so both need a
+        # fresh optimizer state. Only resetting sampled_idxs left dead_indices
+        # carrying whatever momentum accumulated while that GS's opacity was
+        # decaying toward min_opacity -- Adam would then keep pushing the
+        # freshly-relocated (now healthy) opacity back down on the very next
+        # step(s), often re-triggering the dead_mask check before the new
+        # gradient signal could take over.
         v[sampled_idxs] = 0
+        v[dead_indices] = 0
         return v
 
     # update the parameters and the state in the optimizers
@@ -352,6 +361,7 @@ def relocate(
     for k, v in state.items():
         if isinstance(v, torch.Tensor):
             v[sampled_idxs] = 0
+            v[dead_indices] = 0
     if scene is not None:
         scene.on_relocate(dead_indices, sampled_idxs)
 
