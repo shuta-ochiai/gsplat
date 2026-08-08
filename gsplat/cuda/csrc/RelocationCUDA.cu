@@ -67,7 +67,14 @@ __global__ void relocation_kernel(
         for(int k = 0; k <= (i - 1); ++k)
         {
             float bin_coeff  = binoms[(i - 1) * n_max + k];
-            float term       = (pow(-1.0f, k) / sqrt(static_cast<float>(k + 1))) * pow(new_opacity, k + 1);
+            // (-1)^k via a sign flag rather than pow(-1.0f, k): under
+            // --use_fast_math, pow()/powf() on a negative base can be routed
+            // through exp2f(y*log2f(x)), and log2f of a negative number is
+            // NaN -- silently poisoning denom_sum (and thus new_scales) even
+            // though k is a small nonnegative integer. See
+            // https://github.com/nerfstudio-project/gsplat/pull/953.
+            float sign       = (k % 2 == 0) ? 1.0f : -1.0f;
+            float term       = (sign / sqrt(static_cast<float>(k + 1))) * pow(new_opacity, k + 1);
             denom_sum       += (bin_coeff * term);
         }
     }
