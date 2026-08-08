@@ -299,6 +299,36 @@ def reset_opa(
 
 
 @torch.no_grad()
+def _relocation_target_probs(opacities: Tensor, min_opacity: float) -> Tensor:
+    """Multinomial sampling weights for choosing relocation/growth targets.
+
+    A GS whose opacity is only just above min_opacity is a bad target to
+    split: compute_relocation's clamp(min=min_opacity) means its child(ren)
+    -- and, for relocate(), the target itself -- land back at ~min_opacity,
+    i.e. a stillborn relocation that will likely re-trigger the dead_mask
+    check at the very next refine step. GSs with opacity below 2*min_opacity
+    are therefore excluded (zero weight) from being chosen as a target.
+
+    Falls back to plain opacity weighting when every candidate is "weak"
+    (all below 2*min_opacity), since an all-zero distribution would make
+    torch.multinomial error out.
+
+    Args:
+        opacities: Opacities of the candidate targets, any shape (flattened).
+        min_opacity: The strategy's min_opacity; targets need >= 2x this to
+          get nonzero weight.
+
+    Returns:
+        Sampling weights, shape [N], matching flattened opacities.
+    """
+    opacities = opacities.flatten()
+    strong = opacities >= 2.0 * min_opacity
+    if not torch.any(strong):
+        return opacities
+    return torch.where(strong, opacities, torch.zeros_like(opacities))
+
+
+@torch.no_grad()
 def relocate(
     params: Union[Dict[str, torch.nn.Parameter], torch.nn.ParameterDict],
     optimizers: Dict[str, torch.optim.Optimizer],
@@ -323,7 +353,7 @@ def relocate(
     n = len(dead_indices)
 
     # Sample for new GSs
-    probs = opacities[alive_indices].flatten()  # ensure its shape is [N,]
+    probs = _relocation_target_probs(opacities[alive_indices], min_opacity)
     sampled_idxs = _multinomial_sample(probs, n, replacement=True)
     sampled_idxs = alive_indices[sampled_idxs]
     new_opacities, new_scales = compute_relocation(
@@ -378,7 +408,7 @@ def sample_add(
 ):
     opacities = torch.sigmoid(params["opacities"])
 
-    probs = opacities.flatten()
+    probs = _relocation_target_probs(opacities, min_opacity)
     sampled_idxs = _multinomial_sample(probs, n, replacement=True)
     new_opacities, new_scales = compute_relocation(
         opacities=opacities[sampled_idxs],

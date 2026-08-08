@@ -49,7 +49,9 @@ def _make_params_and_optimizers(opacities: torch.Tensor):
     torch.manual_seed(0)
     params = {
         "means": torch.nn.Parameter(torch.randn(N, 3, device=device)),
-        "scales": torch.nn.Parameter(torch.log(torch.rand(N, 3, device=device) * 0.1 + 0.01)),
+        "scales": torch.nn.Parameter(
+            torch.log(torch.rand(N, 3, device=device) * 0.1 + 0.01)
+        ),
         "quats": torch.nn.Parameter(torch.randn(N, 4, device=device)),
         "opacities": torch.nn.Parameter(opacities.clone()),
     }
@@ -62,7 +64,9 @@ def _make_params_and_optimizers(opacities: torch.Tensor):
     return params, optimizers
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="relocate() depends on the CUDA relocation op")
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="relocate() depends on the CUDA relocation op"
+)
 def test_relocate_resets_optimizer_state_for_dead_indices():
     N = 8
     dead_indices = torch.tensor([0, 1], device=device)
@@ -79,7 +83,9 @@ def test_relocate_resets_optimizer_state_for_dead_indices():
     with torch.no_grad():
         opa_state["exp_avg"][dead_indices] = -10.0
         opa_state["exp_avg_sq"][dead_indices] = 10.0
-        params["opacities"][dead_indices] = torch.logit(torch.tensor(0.001, device=device))
+        params["opacities"][dead_indices] = torch.logit(
+            torch.tensor(0.001, device=device)
+        )
 
     binoms = _binomial_table(51, device)
     relocate(params, optimizers, state={}, mask=mask, binoms=binoms, min_opacity=0.005)
@@ -96,7 +102,9 @@ def test_relocate_resets_optimizer_state_for_dead_indices():
     assert torch.sigmoid(dead_to_donor).min() >= 0.005
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="relocate() depends on the CUDA relocation op")
+@pytest.mark.skipif(
+    not torch.cuda.is_available(), reason="relocate() depends on the CUDA relocation op"
+)
 def test_relocate_survives_zero_gradient_steps_after_reset():
     """Behavioral check: with the reset in place, a relocated GS's opacity
     must not collapse back below min_opacity purely from stale Adam momentum
@@ -114,7 +122,9 @@ def test_relocate_survives_zero_gradient_steps_after_reset():
     with torch.no_grad():
         opa_state["exp_avg"][dead_indices] = -10.0
         opa_state["exp_avg_sq"][dead_indices] = 10.0
-        params["opacities"][dead_indices] = torch.logit(torch.tensor(0.001, device=device))
+        params["opacities"][dead_indices] = torch.logit(
+            torch.tensor(0.001, device=device)
+        )
 
     binoms = _binomial_table(51, device)
     relocate(params, optimizers, state={}, mask=mask, binoms=binoms, min_opacity=0.005)
