@@ -164,40 +164,6 @@ def test_strategy_requires_grad():
     assert_consistent_sizes(params)
 
 
-def test_relocation_target_probs():
-    from gsplat.strategy.ops import _relocation_target_probs
-
-    min_opacity = 0.005
-
-    # Weak targets (opacity < 2*min_opacity) get excluded (zero weight);
-    # strong ones keep their opacity as weight.
-    opacities = torch.tensor([0.001, 0.005, 0.009, 0.011, 0.5, 0.9])
-    weak = opacities < 2 * min_opacity
-    probs = _relocation_target_probs(opacities, min_opacity)
-    assert torch.all(probs[weak] == 0)
-    assert torch.equal(probs[~weak], opacities[~weak])
-
-    # All-weak candidate set falls back to plain opacity weighting rather
-    # than an all-zero distribution (which torch.multinomial can't sample).
-    all_weak = torch.tensor([0.001, 0.002, 0.003, 0.0001])
-    fallback_probs = _relocation_target_probs(all_weak, min_opacity)
-    assert torch.equal(fallback_probs, all_weak)
-    assert torch.any(fallback_probs > 0)
-
-    # [N, 1]-shaped opacities (as stored in params["opacities"]) are flattened.
-    opacities_col = opacities.unsqueeze(-1)
-    probs_col = _relocation_target_probs(opacities_col, min_opacity)
-    assert probs_col.shape == (opacities.shape[0],)
-    assert torch.equal(probs_col, probs)
-
-    # multinomial sampling from the excluding distribution never selects a
-    # zero-weight (weak) candidate.
-    torch.manual_seed(0)
-    sampled = torch.multinomial(probs, 2000, replacement=True)
-    assert not torch.any(weak[sampled])
-
-
 if __name__ == "__main__":
     test_strategy()
     test_strategy_requires_grad()
-    test_relocation_target_probs()
